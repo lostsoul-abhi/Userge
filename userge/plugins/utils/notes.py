@@ -12,27 +12,22 @@ from userge import userge, Message, get_collection
 NOTES_COLLECTION = get_collection("notes")
 
 
-@userge.on_cmd("notes", about="__List all saved notes__")
+@userge.on_cmd("notes", about={'header': "List all saved notes"})
 async def notes_active(message: Message):
-    out = "`There are no saved notes in this chat`"
-
+    out = ''
     for note in NOTES_COLLECTION.find({'chat_id': message.chat.id}, {'name': 1}):
-        if out == "`There are no saved notes in this chat`":
-            out = "**--Notes saved in this chat:--**\n\n"
-            out += " 🔹 `{}`\n".format(note['name'])
+        out += " 📌 `{}`\n".format(note['name'])
 
-        else:
-            out += " 🔹 `{}`\n".format(note['name'])
+    if out:
+        await message.edit("**--Notes saved in this chat:--**\n\n" + out, del_in=0)
 
-    await message.edit(out)
+    else:
+        await message.err("There are no saved notes in this chat")
 
 
-@userge.on_cmd("delnote", about="""\
-__Deletes a note by name__
-
-**Usage:**
-
-    `.delnote [note name]`""")
+@userge.on_cmd("delnote", about={
+    'header': "Deletes a note by name",
+    'usage': ".delnote [note name]"})
 async def remove_notes(message: Message):
     notename = message.input_str
 
@@ -48,16 +43,14 @@ async def remove_notes(message: Message):
     await message.edit(text=out, del_in=3)
 
 
-@userge.on_cmd(r"(\w[\w_]*)",
-               about="""\
-__Gets a note by name__
-
-**Usage:**
-
-    `#[notename]`""",
+@userge.on_cmd(r"(?:#|get\s)(\w[\w_]*)",
+               about={
+    'header': "Gets a note by name",
+    'usage': "#[notename]\nget notename"},
+               group=-1,
                name="note",
-               trigger='#',
-               only_me=False)
+               trigger='',
+               filter_me=False)
 async def note(message: Message):
     notename = message.matches[0].group(1)
     found = NOTES_COLLECTION.find_one(
@@ -69,14 +62,11 @@ async def note(message: Message):
         await message.force_edit(text=out)
 
 
-@userge.on_cmd("addnote (\\w[\\w_]*)(?:\\s([\\s\\S]+))?",
-               about="""\
-__Adds a note by name__
-
-**Usage:**
-
-    `.addnote [note name] [content | reply to msg]`""")
-async def add_filter(message: Message):
+@userge.on_cmd(r"addnote (\w[\w_]*)(?:\s([\s\S]+))?",
+               about={
+    'header': "Adds a note by name",
+    'usage': ".addnote [note name] [content | reply to msg]"})
+async def add_note(message: Message):
     notename = message.matches[0].group(1)
     content = message.matches[0].group(2)
 

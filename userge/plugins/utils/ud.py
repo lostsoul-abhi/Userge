@@ -12,16 +12,10 @@ import urbandict
 from userge import userge, Message
 
 
-@userge.on_cmd("ub", about="""\
-__Searches Urban Dictionary for the query__
-
-**Usage:**
-
-    `.ub [query]`
-    
-**Exaple:**
-
-    `.ub userge`""")
+@userge.on_cmd("ud", about={
+    'header': "Searches Urban Dictionary for the query",
+    'usage': ".ud [query]",
+    'examples': ".ud userge"})
 async def urban_dict(message: Message):
     await message.edit("Processing...")
     query = message.input_str
@@ -39,8 +33,8 @@ async def urban_dict(message: Message):
 
     output = ''
     for i, mean_ in enumerate(mean, start=1):
-        output += f"**DEF {i}** : __{mean_['def']}__\n" + \
-            f"**EX {i}** : __{mean_['example'] or 'not found'}__\n\n"
+        output += f"{i}. **{mean_['def']}**\n" + \
+            f"  Examples:\n  * `{mean_['example'] or 'not found'}`\n\n"
 
     if not output:
         await message.err(text=f"No result found for **{query}**")

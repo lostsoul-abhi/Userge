@@ -24,14 +24,13 @@ LOGO_PATH = 'resources/userge.png'
 THUMB_PATH = Config.DOWN_PATH + "thumb_image.jpg"
 
 
-@userge.on_cmd("upload", about="""\
-__upload files to telegram__
-
-**Usage:**
-
-    `.upload [file or folder path]`""")
+@userge.on_cmd("upload", about={
+    'header': "Upload files to telegram",
+    'flags': {'-d': "upload as document"},
+    'usage': ".upload [flags] [file or folder path]"}, del_pre=True)
 async def uploadtotg(message: Message):
-    path_ = message.input_str
+    flags = message.flags
+    path_ = message.filtered_input_str
     if not path_:
         await message.edit("invalid input!, check `.help .upload`", del_in=5)
         return
@@ -44,26 +43,27 @@ async def uploadtotg(message: Message):
 
     else:
         await message.delete()
-        await explorer(string, message.chat.id)
+        await explorer(string, message.chat.id, flags)
 
 
-async def explorer(path: Path, chatid):
+async def explorer(path: Path, chatid, flags):
     if path.is_file():
         try:
-            await upload(path, chatid)
+            await upload(path, chatid, flags)
 
         except FloodWait as x:
             time.sleep(x.x)  # asyncio sleep ?
 
     elif path.is_dir():
         for i in path.iterdir():
-            await explorer(i, chatid)
+            await explorer(i, chatid, flags)
 
 
-async def upload(path: Path, chat_id: int):
-    if path.name.endswith((".mkv", ".mp4", ".webm")):
+async def upload(path: Path, chat_id: int, flags):
+    if path.name.endswith((".mkv", ".mp4", ".webm")) and ('d' not in flags):
         await vid_upload(chat_id, path)
-
+    elif path.name.endswith((".mp3", ".flac", ".wav", ".m4a")) and ('d' not in flags):
+        await audio_upload(chat_id, path)
     else:
         await doc_upload(chat_id, path)
 
@@ -89,9 +89,12 @@ async def doc_upload(chat_id, path):
         )
     )
 
+    await finalize(chat_id, message, msg, start_t)
+
+
+async def finalize(chat_id, message, msg, start_t):
     await CHANNEL.fwd_msg(msg)
     await userge.send_chat_action(chat_id, "cancel")
-
     if message.process_is_canceled:
         await message.edit("`Process Canceled!`", del_in=5)
 
@@ -107,7 +110,7 @@ async def vid_upload(chat_id, path):
     metadata = extractMetadata(createParser(strpath))
 
     message: Message = await userge.send_message(
-        chat_id, f"`Uploading {path.name} ...` as a video")
+        chat_id, f"`Uploading {path.name} as a video ..`")
 
     start_t = datetime.now()
     c_time = time.time()
@@ -125,9 +128,8 @@ async def vid_upload(chat_id, path):
             "uploading", userge, message, c_time
         )
     )
-
-    await CHANNEL.fwd_msg(msg)
     await userge.send_chat_action(chat_id, "cancel")
+    await CHANNEL.fwd_msg(msg)
     await remove_thumb(thumb)
 
     if message.process_is_canceled:
@@ -139,7 +141,41 @@ async def vid_upload(chat_id, path):
         await message.edit(f"Uploaded in {ms} seconds")
 
 
-async def get_thumb(path: str = '') -> str:
+async def audio_upload(chat_id, path):
+    title = None
+    artist = None
+    message: Message = await userge.send_message(
+        chat_id, f"`Uploading {path.name} as audio ...`")
+    strpath = str(path)
+    start_t = datetime.now()
+    c_time = time.time()
+    thumb = await get_thumb()
+    metadata = extractMetadata(createParser(strpath))
+    if metadata.has("title"):
+        title = metadata.get("title")
+    if metadata.has("artist"):
+        artist = metadata.get("artist")
+    await userge.send_chat_action(chat_id, "upload_audio")
+    msg = await userge.send_audio(
+        chat_id=chat_id,
+        audio=strpath,
+        thumb=thumb,
+        caption=path.name,
+        title=title,
+        performer=artist,
+        duration=metadata.get("duration").seconds,
+        parse_mode="html",
+        disable_notification=True,
+        progress=progress,
+        progress_args=(
+            "uploading", userge, message, c_time
+        )
+    )
+
+    await finalize(chat_id, message, msg, start_t)
+
+
+async def get_thumb(path: str = ''):
     if os.path.exists(THUMB_PATH):
         return THUMB_PATH
 
@@ -150,11 +186,13 @@ async def get_thumb(path: str = '') -> str:
             return await take_screen_shot(
                 path, metadata.get("duration").seconds)
 
-    return LOGO_PATH
+    if os.path.exists(LOGO_PATH):
+        return LOGO_PATH
+    return None
 
 
 async def remove_thumb(thumb: str) -> None:
     if os.path.exists(thumb) and \
-        thumb != LOGO_PATH and \
+            thumb != LOGO_PATH and \
             thumb != THUMB_PATH:
         os.remove(thumb)
